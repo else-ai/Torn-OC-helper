@@ -1,10 +1,12 @@
 // ==UserScript==
 // @name         ZEM's OC 2.0 Helper
 // @namespace    https://www.torn.com/profiles.php?XID=4038551
-// @version      2.4.2
-// @description  Clean role highlights, non-clipping Impact/Fail footer, Live Page OCs dashboard tab, and full offline OC 2.0 database.
+// @version      2.4.3
+// @description  Clean role highlights, Page OCs dashboard, full offline OC 2.0 database. (Fixed native Torn menus).
 // @author       ZEM [4038551]
 // @match        https://www.torn.com/factions.php?step=your*
+// @updateURL    https://github.com/else-ai/Torn-OC-helper/raw/refs/heads/main/ZEMs-OC-Helper.user.js
+// @downloadURL  https://github.com/else-ai/Torn-OC-helper/raw/refs/heads/main/ZEMs-OC-Helper.user.js
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==
