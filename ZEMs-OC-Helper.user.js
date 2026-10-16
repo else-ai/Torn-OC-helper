@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ZEM's OC 2.0 Helper
 // @namespace    https://www.torn.com/profiles.php?XID=4038551
-// @version      2.4.6
+// @version      2.5.6
 // @description  Clean role highlights, Page OCs dashboard, full offline OC 2.0 database. (Fixed native Torn menus).
 // @author       ZEM [4038551]
 // @match        https://www.torn.com/factions.php?step=your*
