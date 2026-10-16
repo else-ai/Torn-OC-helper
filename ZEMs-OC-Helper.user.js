@@ -23,7 +23,7 @@
     // =========================================================================
     const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version)
         ? GM_info.script.version
-        : '2.4.6';
+        : '2.5.6';
     const GITHUB_RAW_URL = 'https://raw.githubusercontent.com/else-ai/Torn-OC-helper/main/ZEMs-OC-Helper.user.js';
     const GITHUB_API_URL = 'https://api.github.com/repos/else-ai/Torn-OC-helper/contents/ZEMs-OC-Helper.user.js';
     const INSTALL_URL = 'https://github.com/else-ai/Torn-OC-helper/raw/refs/heads/main/ZEMs-OC-Helper.user.js';
