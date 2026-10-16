@@ -7,7 +7,11 @@
 // @match        https://www.torn.com/factions.php?step=your*
 // @updateURL    https://github.com/else-ai/Torn-OC-helper/raw/refs/heads/main/ZEMs-OC-Helper.user.js
 // @downloadURL  https://github.com/else-ai/Torn-OC-helper/raw/refs/heads/main/ZEMs-OC-Helper.user.js
-// @grant        none
+// @grant        GM_xmlhttpRequest
+// @grant        GM.xmlHttpRequest
+// @connect      raw.githubusercontent.com
+// @connect      github.com
+// @connect      api.github.com
 // @run-at       document-idle
 // ==/UserScript==
 
@@ -19,8 +23,9 @@
     // =========================================================================
     const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version)
         ? GM_info.script.version
-        : '2.4.5';
+        : '2.4.6';
     const GITHUB_RAW_URL = 'https://raw.githubusercontent.com/else-ai/Torn-OC-helper/main/ZEMs-OC-Helper.user.js';
+    const GITHUB_API_URL = 'https://api.github.com/repos/else-ai/Torn-OC-helper/contents/ZEMs-OC-Helper.user.js';
     const INSTALL_URL = 'https://github.com/else-ai/Torn-OC-helper/raw/refs/heads/main/ZEMs-OC-Helper.user.js';
 
     const ANCHOR_MIN = 20.0;    // 20%+ is Anchor
@@ -432,6 +437,48 @@
         return 0;
     }
 
+    // CSP-Safe Remote Script Fetcher (GM_xmlhttpRequest -> GitHub API -> Fetch)
+    function fetchRemoteScriptText() {
+        const gmXhr = (typeof GM_xmlhttpRequest === 'function')
+            ? GM_xmlhttpRequest
+            : (typeof GM !== 'undefined' && typeof GM.xmlHttpRequest === 'function')
+                ? GM.xmlHttpRequest
+                : null;
+
+        // 1. Primary: Userscript Manager XHR (bypasses Torn's strict CSP)
+        if (gmXhr) {
+            return new Promise((resolve, reject) => {
+                gmXhr({
+                    method: 'GET',
+                    url: `${GITHUB_RAW_URL}?t=${Date.now()}`,
+                    headers: { 'Cache-Control': 'no-cache' },
+                    onload: (res) => {
+                        if (res.status >= 200 && res.status < 300 && res.responseText) {
+                            resolve(res.responseText);
+                        } else {
+                            reject(new Error(`HTTP ${res.status}`));
+                        }
+                    },
+                    onerror: () => reject(new Error('GM_xmlhttpRequest network error')),
+                    ontimeout: () => reject(new Error('GM_xmlhttpRequest timeout'))
+                });
+            });
+        }
+
+        // 2. Fallback: GitHub API + Standard Fetch
+        return fetch(`${GITHUB_API_URL}?t=${Date.now()}`, { cache: 'no-store' })
+            .then(r => {
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                return r.json();
+            })
+            .then(data => {
+                if (data && data.content) {
+                    return atob(data.content.replace(/\s/g, ''));
+                }
+                throw new Error('Empty API content');
+            });
+    }
+
     async function checkForUpdates() {
         const statusEl = document.getElementById('zem-update-status');
         const btnEl = document.getElementById('zem-btn-check-update');
@@ -439,24 +486,22 @@
 
         btnEl.disabled = true;
         btnEl.textContent = 'Checking...';
-        statusEl.textContent = 'Contacting GitHub...';
+        statusEl.textContent = 'Checking GitHub...';
         statusEl.style.color = '#aaa';
 
         try {
-            const response = await fetch(`${GITHUB_RAW_URL}?t=${Date.now()}`, { cache: 'no-store' });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const scriptText = await response.text();
+            const scriptText = await fetchRemoteScriptText();
             const match = scriptText.match(/@version\s+([^\s\r\n]+)/);
 
             if (!match || !match[1]) {
-                throw new Error('Could not parse remote @version');
+                throw new Error('Could not parse @version from GitHub');
             }
 
             const remoteVersion = match[1].trim();
             const cmp = compareVersions(remoteVersion, SCRIPT_VERSION);
 
             if (cmp > 0) {
-                statusEl.innerHTML = `<span style="color:#ffd43b; font-weight:bold;">Update available: v${remoteVersion}</span>`;
+                statusEl.innerHTML = `<span style="color:#ffd43b; font-weight:bold;">New version available: v${remoteVersion}</span>`;
                 btnEl.textContent = `Update to v${remoteVersion}`;
                 btnEl.disabled = false;
                 btnEl.style.borderColor = '#51cf66';
@@ -470,7 +515,7 @@
                 btnEl.disabled = false;
             }
         } catch (err) {
-            statusEl.innerHTML = `<span style="color:#ff8787;">Update check failed</span>`;
+            statusEl.innerHTML = `<span style="color:#ff8787;" title="${(err && err.message) || 'Unknown error'}">Check failed (Allow domain in Tampermonkey)</span>`;
             btnEl.textContent = 'Retry Check';
             btnEl.disabled = false;
         }
