@@ -1287,11 +1287,6 @@
                 </div>
 
                 <div class="zem-guide-box">
-                    <h4>Planning Queue (24h per slot)</h4>
-                    <p>Crimes plan one person at a time for 24 hours per slot. A 4-man OC takes 4 days total. If the next slot in line is empty, the timer pauses until someone jumps in. You can kick anyone sitting at 0% progress without losing time.</p>
-                </div>
-
-                <div class="zem-guide-box">
                     <h4>Items & Running the Crime</h4>
                     <p>Actual tools (Lockpicks, Drills, Cutters, Jemmy, Badges, Cameras) stay in your inventory after the OC. Consumables (Zip Ties, C4, Thermite, Viruses, Grenades, Drugs) get used up.</p>
                     <p>When the final 24h finishes, everyone needs to be in Torn and out of the hospital to run it. Being in jail is fine for planning and most executions, just don't be flying or hosped when the timer hits zero.</p>
