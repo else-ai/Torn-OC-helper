@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ZEM's OC 2.0 Helper
 // @namespace    https://www.torn.com/profiles.php?XID=4038551
-// @version      2.4.4
+// @version      2.4.5
 // @description  Clean role highlights, Page OCs dashboard, full offline OC 2.0 database. (Fixed native Torn menus).
 // @author       ZEM [4038551]
 // @match        https://www.torn.com/factions.php?step=your*
@@ -11,13 +11,18 @@
 // @run-at       document-idle
 // ==/UserScript==
 
-
 (function () {
     'use strict';
 
     // =========================================================================
-    // 1. LOCKED THRESHOLDS & SETTINGS
+    // 1. LOCKED THRESHOLDS, VERSION & SETTINGS
     // =========================================================================
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version)
+        ? GM_info.script.version
+        : '2.4.5';
+    const GITHUB_RAW_URL = 'https://raw.githubusercontent.com/else-ai/Torn-OC-helper/main/ZEMs-OC-Helper.user.js';
+    const INSTALL_URL = 'https://github.com/else-ai/Torn-OC-helper/raw/refs/heads/main/ZEMs-OC-Helper.user.js';
+
     const ANCHOR_MIN = 20.0;    // 20%+ is Anchor
     const SECONDARY_MIN = 14.0; // 14% - 19.9% is Secondary
     const STORAGE_KEY = 'zem_oc2_helper_settings_v24';
@@ -414,6 +419,63 @@
         return `rgba(${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255}, ${alpha})`;
     }
 
+    function compareVersions(v1, v2) {
+        const p1 = String(v1).split('.').map(n => parseInt(n, 10) || 0);
+        const p2 = String(v2).split('.').map(n => parseInt(n, 10) || 0);
+        const len = Math.max(p1.length, p2.length);
+        for (let i = 0; i < len; i++) {
+            const a = p1[i] || 0;
+            const b = p2[i] || 0;
+            if (a > b) return 1;
+            if (a < b) return -1;
+        }
+        return 0;
+    }
+
+    async function checkForUpdates() {
+        const statusEl = document.getElementById('zem-update-status');
+        const btnEl = document.getElementById('zem-btn-check-update');
+        if (!statusEl || !btnEl) return;
+
+        btnEl.disabled = true;
+        btnEl.textContent = 'Checking...';
+        statusEl.textContent = 'Contacting GitHub...';
+        statusEl.style.color = '#aaa';
+
+        try {
+            const response = await fetch(`${GITHUB_RAW_URL}?t=${Date.now()}`, { cache: 'no-store' });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const scriptText = await response.text();
+            const match = scriptText.match(/@version\s+([^\s\r\n]+)/);
+
+            if (!match || !match[1]) {
+                throw new Error('Could not parse remote @version');
+            }
+
+            const remoteVersion = match[1].trim();
+            const cmp = compareVersions(remoteVersion, SCRIPT_VERSION);
+
+            if (cmp > 0) {
+                statusEl.innerHTML = `<span style="color:#ffd43b; font-weight:bold;">Update available: v${remoteVersion}</span>`;
+                btnEl.textContent = `Update to v${remoteVersion}`;
+                btnEl.disabled = false;
+                btnEl.style.borderColor = '#51cf66';
+                btnEl.style.color = '#69db7c';
+                btnEl.onclick = () => {
+                    window.open(`${INSTALL_URL}?t=${Date.now()}`, '_blank');
+                };
+            } else {
+                statusEl.innerHTML = `<span style="color:#69db7c;">Up to date (v${SCRIPT_VERSION})</span>`;
+                btnEl.textContent = 'Check for Updates';
+                btnEl.disabled = false;
+            }
+        } catch (err) {
+            statusEl.innerHTML = `<span style="color:#ff8787;">Update check failed</span>`;
+            btnEl.textContent = 'Retry Check';
+            btnEl.disabled = false;
+        }
+    }
+
     function buildNormalizedDB() {
         normalizedDB = {};
         for (const [ocName, ocObj] of Object.entries(OC_DATABASE)) {
@@ -756,6 +818,17 @@
                 font-size: 13.5px;
                 flex-shrink: 0;
             }
+            .zem-title-ver {
+                font-size: 10.5px;
+                font-weight: 700;
+                color: #a1a1aa;
+                background: #2d2d35;
+                border: 1px solid #3f3f46;
+                padding: 1px 6px;
+                border-radius: 4px;
+                margin-left: 6px;
+                vertical-align: middle;
+            }
             .zem-modal-close {
                 cursor: pointer;
                 background: none;
@@ -984,6 +1057,7 @@
                 display: inline-block;
             }
             .zem-btn:hover { background: #3b3b44; color: #fff; }
+            .zem-btn:disabled { opacity: 0.6; cursor: default; }
             .zem-dev-btn {
                 background: #1f3325;
                 border-color: #365c42;
@@ -1205,7 +1279,7 @@
         // Floating Button
         const btn = document.createElement('div');
         btn.id = 'zem-oc-float-btn';
-        btn.title = "ZEM's OC 2.0 Helper (Click to open, drag to move)";
+        btn.title = `ZEM's OC 2.0 Helper v${SCRIPT_VERSION} (Click to open, drag to move)`;
         btn.textContent = 'OC';
         btn.style.top = settings.btnPos.top;
         btn.style.left = settings.btnPos.left;
@@ -1216,7 +1290,7 @@
         modal.id = 'zem-oc-modal';
         modal.innerHTML = `
             <div class="zem-modal-header">
-                <span>ZEM's OC 2.0 Helper</span>
+                <span>ZEM's OC 2.0 Helper <span class="zem-title-ver">v${SCRIPT_VERSION}</span></span>
                 <button class="zem-modal-close" title="Close">&times;</button>
             </div>
             <div class="zem-modal-tabs">
@@ -1263,6 +1337,13 @@
                     <label>Show Pass / Fail Chances</label>
                     <input type="checkbox" id="zem-set-show-fail" ${settings.showFailChances ? 'checked' : ''}>
                 </div>
+                <div class="zem-setting-row">
+                    <div>
+                        <label style="display:block;">Script Version</label>
+                        <span id="zem-update-status" style="font-size:10.5px; color:#888;">Current: v${SCRIPT_VERSION}</span>
+                    </div>
+                    <button class="zem-btn" id="zem-btn-check-update">Check for Updates</button>
+                </div>
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-top:14px;">
                     <button class="zem-btn" id="zem-btn-reset">Reset Colors</button>
                     <a href="https://www.torn.com/profiles.php?XID=4038551" target="_blank" class="zem-btn zem-dev-btn">Dev: ZEM [4038551]</a>
@@ -1282,14 +1363,10 @@
                     <p>The top crime bar shows the combined <strong>Pass / Fail %</strong> for the whole team. Hovering over any slot's Fail badge (or opening the <strong>Page OCs</strong> tab) shows how much fail risk that specific player is adding to the overall crime.</p>
                 </div>
 
-                <div class="zem-guide-box">
+                <div class="zem-guide-box" style="margin-bottom:0;">
                     <h4>Items & Running the Crime</h4>
                     <p>Actual tools (Lockpicks, Drills, Cutters, Jemmy, Badges, Cameras) stay in your inventory after the OC. Consumables (Zip Ties, C4, Thermite, Viruses, Grenades, Drugs) get used up.</p>
                     <p>When the final 24h finishes, everyone needs to be in Torn and out of the hospital to run it. Being in jail is fine for planning and most executions, just don't be flying or hosped when the timer hits zero.</p>
-                </div>
-
-                <div style="text-align:right; margin-top:10px;">
-                    <a href="https://www.torn.com/profiles.php?XID=4038551" target="_blank" class="zem-btn zem-dev-btn">Script by ZEM [4038551]</a>
                 </div>
             </div>
         `;
@@ -1396,6 +1473,8 @@
             renderOCInfoList();
             renderLivePageOCs();
         });
+
+        document.getElementById('zem-btn-check-update').addEventListener('click', checkForUpdates);
 
         document.getElementById('zem-btn-reset').addEventListener('click', () => {
             const currentPos = settings.btnPos;
