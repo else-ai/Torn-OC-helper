@@ -11,6 +11,7 @@
 // @run-at       document-idle
 // ==/UserScript==
 
+
 (function () {
     'use strict';
 
@@ -470,7 +471,6 @@
         return null;
     }
 
-    // Properly extracts the player's actual Torn username & XID (ignores "View Profile" aria-labels)
     function extractPlayerInfo(slot, roleTitleEl) {
         let xid = null;
         let candidateName = '';
@@ -482,26 +482,22 @@
             return /^(view profile|profile|join|assign|empty|open|slot|recruit|waiting|planning|ready)$/i.test(s);
         };
 
-        // 1. Grab XID from profile link if present
         const profileLink = slot.querySelector('a[href*="profiles.php?XID="]');
         if (profileLink) {
             const xidMatch = profileLink.href.match(/XID=(\d+)/i);
             if (xidMatch) xid = xidMatch[1];
 
-            // Check honor-text spans inside link (Torn often splits honor bar names into character spans)
             const honorSpans = profileLink.querySelectorAll('[class*="honor-text-svg"] span, [class*="honor-text"], [class*="userName"], [class*="name"]');
             if (honorSpans.length > 0) {
                 const combined = Array.from(honorSpans).map(el => el.textContent).join('').trim();
                 if (!isIgnoredLabel(combined)) candidateName = combined;
             }
 
-            // Or check direct text of link
             if (!candidateName) {
                 const rawLinkTxt = (profileLink.textContent || '').replace(/view profile/ig, '').trim();
                 if (!isIgnoredLabel(rawLinkTxt)) candidateName = rawLinkTxt;
             }
 
-            // Or check image alt attribute inside link
             if (!candidateName) {
                 const img = profileLink.querySelector('img[alt]');
                 if (img) {
@@ -511,7 +507,6 @@
             }
         }
 
-        // 2. Check anywhere in the slot for honor-text or player name elements
         if (!candidateName) {
             const honorEl = slot.querySelector('[class*="honor-text"]:not([class*="svg"]), [class*="userName"], [class*="playerName"], [class*="memberName"]');
             if (honorEl && (!roleTitleEl || !roleTitleEl.contains(honorEl))) {
@@ -520,7 +515,6 @@
             }
         }
 
-        // 3. Check image alt anywhere in the slot
         if (!candidateName) {
             const imgs = slot.querySelectorAll('img[alt]');
             for (const img of imgs) {
@@ -532,7 +526,6 @@
             }
         }
 
-        // 4. Fallback: walk text nodes inside the slot
         if (!candidateName) {
             const walker = document.createTreeWalker(slot, NodeFilter.SHOW_TEXT, null, false);
             let node;
@@ -589,11 +582,9 @@
             .zem-oc-role-low {
                 border-radius: 6px !important;
                 position: relative !important;
-                overflow: hidden !important;
-                display: flex !important;
-                flex-direction: column !important;
-                justify-content: space-between !important;
+                /* Removed overflow:hidden and display:flex to fix Torn's native remove/edit menus */
                 box-sizing: border-box !important;
+                transition: box-shadow 0.2s ease, border-color 0.2s ease;
             }
 
             .zem-oc-role-anchor {
@@ -626,11 +617,14 @@
                 margin-top: 4px;
                 background: rgba(10, 10, 12, 0.90);
                 border-top: 1px solid rgba(255, 255, 255, 0.08);
+                border-bottom-left-radius: 5px;
+                border-bottom-right-radius: 5px;
                 font-family: Arial, sans-serif;
                 font-size: 9.5px;
                 line-height: 1.15;
                 white-space: nowrap;
                 z-index: 3;
+                clear: both;
             }
 
             .zem-oc-impact-pill {
