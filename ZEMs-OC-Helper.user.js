@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         ZEM's OC 2.0 Helper
 // @namespace    https://www.torn.com/profiles.php?XID=4038551
-// @version      2.8.1
-// @description  Modern UI, tactical SVG button, Page OCs dashboard, 100% verified offline OC 2.0 database, compact non-clipping role cards.
+// @version      2.8.2
+// @description  Modern UI, tactical SVG button, Page OCs dashboard, 100% verified offline OC 2.0 database, accurate fail badge risk colors.
 // @author       ZEM [4038551]
 // @match        https://www.torn.com/factions.php?step=your*
 // @updateURL    https://github.com/else-ai/Torn-OC-helper/raw/refs/heads/main/ZEMs-OC-Helper.user.js
@@ -23,7 +23,7 @@
     // =========================================================================
     const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version)
         ? GM_info.script.version
-        : '2.8.1';
+        : '2.8.2';
     const GITHUB_RAW_URL = 'https://raw.githubusercontent.com/else-ai/Torn-OC-helper/main/ZEMs-OC-Helper.user.js';
     const GITHUB_API_URL = 'https://api.github.com/repos/else-ai/Torn-OC-helper/contents/ZEMs-OC-Helper.user.js';
     const INSTALL_URL = 'https://github.com/else-ai/Torn-OC-helper/raw/refs/heads/main/ZEMs-OC-Helper.user.js';
@@ -487,20 +487,42 @@
         if (weight <= 0 || weight < 5.0) return 0;
 
         if (level >= 8) {
-            if (weight >= 35.0) return 75;
-            if (weight >= ANCHOR_MIN) return 70;
-            if (weight >= SECONDARY_MIN) return 60;
-            return 50;
-        }
-        if (level === 7) {
-            if (weight >= ANCHOR_MIN) return 80;
+            if (weight >= 35.0) return 80;
+            if (weight >= ANCHOR_MIN) return 75;
             if (weight >= SECONDARY_MIN) return 70;
             return 60;
         }
-        if (weight >= 35.0) return 75;
-        if (weight >= ANCHOR_MIN) return 70;
-        if (weight >= SECONDARY_MIN) return 65;
-        return 60;
+        if (level === 7) {
+            if (weight >= ANCHOR_MIN) return 80;
+            if (weight >= SECONDARY_MIN) return 75;
+            return 65;
+        }
+        // Levels 1-6: Standard safe CPR targets (aligned with Torn's 80+ green / 75+ safe curve)
+        if (weight >= ANCHOR_MIN) return 80;
+        if (weight >= SECONDARY_MIN) return 75;
+        return 70;
+    }
+
+    // Strict Fail Badge Risk Classifier: Combines Slot Fail % and Weighted OC Pull-Down
+    function getFailBadgeRiskClass(cpr, slotFail, weightedFail, recMinCPR, weight) {
+        if (weight <= 0) return 'risk-low';
+
+        // Low-impact / Recon slots (<14% weight)
+        if (weight < SECONDARY_MIN) {
+            if (slotFail >= 35 || weightedFail >= 4.0) return 'risk-high';
+            if (slotFail > 20 || weightedFail >= 2.2) return 'risk-med';
+            return 'risk-low';
+        }
+
+        // Anchor (20%+) & Secondary (14%-19.9%) roles:
+        // Never show green if CPR < 80% (Fail > 20%) or if pulling OC down by 3.5%+
+        if (slotFail >= 26 || weightedFail >= 6.0 || (recMinCPR > 0 && cpr < recMinCPR - 5)) {
+            return 'risk-high'; // Red: 26%+ slot fail (<=74% CPR) or -6.0%+ OC pull-down
+        }
+        if (slotFail > 15 || weightedFail >= 3.0 || (recMinCPR > 0 && cpr < recMinCPR)) {
+            return 'risk-med';  // Yellow: 16%-25% slot fail (75%-84% CPR) or -3.0%+ OC pull-down
+        }
+        return 'risk-low';      // Green: <=15% slot fail (85%+ CPR) and low OC pull-down
     }
 
     function compareVersions(v1, v2) {
@@ -728,6 +750,22 @@
             }
         }
 
+        // Fallback: Check honor bar banner image inside the slot (e.g. completed/failed OCs where links may differ)
+        if (!candidateName && !xid) {
+            const imgs = slot.querySelectorAll('img[alt], img[src*="honor"]');
+            for (const img of imgs) {
+                const altTxt = (img.getAttribute('alt') || '').replace(/('s banner|banner|avatar|view profile)/ig, '').trim();
+                if (!isIgnoredLabel(altTxt) && altTxt.length >= 2 && altTxt.length <= 20) {
+                    candidateName = altTxt;
+                    break;
+                }
+                if ((img.src || '').includes('honor')) {
+                    candidateName = 'Member';
+                    break;
+                }
+            }
+        }
+
         if (candidateName || xid) {
             return {
                 name: candidateName || (xid ? `Player [${xid}]` : 'Member'),
@@ -743,13 +781,6 @@
         const text = ocNode.textContent || '';
         const m = text.match(/\b(\d{2}:\d{2}:\d{2}(?::\d{2})?)\b/);
         return m ? m[1] : null;
-    }
-
-    function getCPRRiskClass(cpr, recMinCPR, weight) {
-        if (weight <= 0 || recMinCPR <= 0) return 'risk-low';
-        if (cpr >= recMinCPR) return 'risk-low';
-        if (cpr >= recMinCPR - 8) return 'risk-med';
-        return 'risk-high';
     }
 
     // =========================================================================
@@ -817,7 +848,7 @@
                 box-shadow: 0 1px 4px rgba(0,0,0,0.3) !important;
             }
 
-            /* Compact Non-Clipping Bottom Footer Inside Role Card (Exact v2.5.6 dimensions) */
+            /* Compact Non-Clipping Bottom Footer Inside Role Card */
             .zem-oc-slot-footer {
                 display: var(--zem-footer-display, flex);
                 align-items: center;
@@ -865,11 +896,11 @@
             }
             .zem-oc-fail-pill.risk-med {
                 color: #ffd43b;
-                background: rgba(230, 119, 0, 0.24);
+                background: rgba(230, 119, 0, 0.26);
             }
             .zem-oc-fail-pill.risk-high {
                 color: #ff8787;
-                background: rgba(201, 42, 42, 0.30);
+                background: rgba(201, 42, 42, 0.34);
             }
             .zem-oc-fail-pill.risk-open {
                 color: #74c0fc;
@@ -906,6 +937,16 @@
                 border-radius: 50%;
                 background: #51cf66;
                 box-shadow: 0 0 4px #51cf66;
+            }
+            .zem-oc-header-summary .zem-pass-txt.pass-med { color: #ffd43b; }
+            .zem-oc-header-summary .zem-pass-txt.pass-med::before {
+                background: #fcc419;
+                box-shadow: 0 0 4px #fcc419;
+            }
+            .zem-oc-header-summary .zem-pass-txt.pass-low { color: #ff8787; }
+            .zem-oc-header-summary .zem-pass-txt.pass-low::before {
+                background: #ff6b6b;
+                box-shadow: 0 0 4px #ff6b6b;
             }
             .zem-oc-header-summary .zem-fail-txt { color: #ff7676; }
             .zem-oc-header-summary .zem-est-txt {
@@ -1556,7 +1597,11 @@
             const slotFail = memberCPR !== null ? Math.max(0, 100 - memberCPR) : Math.max(0, 100 - baselineEmptyCPR);
             const weightedFail = +(slotFail * (weight / 100)).toFixed(1);
 
-            const isBelowRec = isSlotFilled && memberCPR !== null && recMinCPR > 0 && memberCPR < recMinCPR;
+            const riskClass = isSlotFilled && memberCPR !== null
+                ? getFailBadgeRiskClass(memberCPR, slotFail, weightedFail, recMinCPR, weight)
+                : 'risk-open';
+
+            const isBelowRec = isSlotFilled && memberCPR !== null && (riskClass === 'risk-high' || (recMinCPR > 0 && memberCPR < recMinCPR));
             if (isBelowRec) hasLowCPRWarning = true;
 
             if (isSlotFilled) {
@@ -1574,13 +1619,14 @@
                 userPreviewCPR,
                 slotFail,
                 weightedFail,
+                riskClass,
                 isBelowRec,
                 playerName: player.name,
                 playerXid: player.xid,
                 isFilled: isSlotFilled
             });
 
-            const sig = `${weight}_${isSlotFilled ? 'F' : 'E'}_${rawDisplayedCPR}`;
+            const sig = `${weight}_${isSlotFilled ? 'F' : 'E'}_${rawDisplayedCPR}_${riskClass}`;
             if (!forceReprocess && slot.dataset.zemOcSig === sig) return;
 
             const isAnchor = weight >= ANCHOR_MIN;
@@ -1613,19 +1659,17 @@
             impPill.textContent = `Imp: ${weight.toFixed(1)}%`;
             footer.appendChild(impPill);
 
-            // 2. Compact Right Pill (Fits cleanly inside narrow cards)
+            // 2. Compact Fail / Rec Pill
             const failPill = document.createElement('span');
             if (weight === 0) {
                 failPill.className = 'zem-oc-fail-pill risk-low';
                 failPill.title = '0.0% Impact Role: Zero failure checkpoints (safe for any CPR)';
                 failPill.textContent = '0% Risk';
             } else if (isSlotFilled && memberCPR !== null) {
-                const riskClass = getCPRRiskClass(memberCPR, recMinCPR, weight);
                 failPill.className = `zem-oc-fail-pill ${riskClass}`;
                 failPill.title = `Joined Member: ${memberCPR}% CPR (OC Rec: ${recText}) | Slot Fail: ${slotFail.toFixed(0)}% | Pulls total OC down by -${weightedFail.toFixed(1)}%`;
                 failPill.textContent = `Fail: ${slotFail.toFixed(0)}%`;
             } else {
-                // Short text so it never stretches or overflows the role card
                 const shortRec = recMinCPR > 0 ? `${recMinCPR}%+` : 'Any';
                 if (userPreviewCPR !== null) {
                     const userMeetsRec = userPreviewCPR >= recMinCPR;
@@ -1666,20 +1710,20 @@
             const oldSummary = titleEl.parentElement.querySelector('.zem-oc-header-summary');
             if (oldSummary) oldSummary.remove();
 
-            // Only show Pass / Fail header pill if at least 1 member is actually in the OC
             if (hasMembers) {
                 const summaryEl = document.createElement('span');
                 summaryEl.className = 'zem-oc-header-summary';
 
                 const prefix = isAllFilled ? '' : 'Est. ';
                 const suffix = isAllFilled ? '' : `<span class="zem-est-txt">(${filledSlotsCount}/${totalSlotsCount})</span>`;
+                const passTierClass = clampedPass < 75 ? 'pass-low' : clampedPass < 85 ? 'pass-med' : '';
 
                 summaryEl.title = isAllFilled
                     ? `Total weighted OC Pass/Fail across all ${totalSlotsCount} joined members`
                     : `Estimated OC Pass/Fail (${filledSlotsCount}/${totalSlotsCount} filled; open slots estimated at OC Recommended Min CPR)`;
 
                 summaryEl.innerHTML = `
-                    <span class="zem-pass-txt">${prefix}Pass: ${clampedPass.toFixed(1)}%</span>
+                    <span class="zem-pass-txt ${passTierClass}">${prefix}Pass: ${clampedPass.toFixed(1)}%</span>
                     <span style="color:#444;">|</span>
                     <span class="zem-fail-txt">Fail: ${clampedFail.toFixed(1)}%</span>
                     ${suffix}
@@ -1864,14 +1908,14 @@
                             <span>Anchor Roles</span>
                             <span>20%+</span>
                         </div>
-                        <p><strong>Carry Slots:</strong> Dictate crime success. Require <strong>70%–80%+ CPR</strong> depending on OC level.</p>
+                        <p><strong>Carry Slots:</strong> Dictate crime success. Require <strong>75%–80%+ CPR</strong> (Fail &le;20%).</p>
                     </div>
                     <div class="zem-tier-card" style="border-top: 3px solid var(--zem-sec-color);">
                         <div class="zem-tier-card-hdr" style="color:var(--zem-sec-color);">
                             <span>Secondary Roles</span>
                             <span>14%–19.9%</span>
                         </div>
-                        <p><strong>Core Support:</strong> Moderate risk. Aim for <strong>60%–70%+ CPR</strong> for reliable clears.</p>
+                        <p><strong>Core Support:</strong> Moderate risk. Aim for <strong>70%–75%+ CPR</strong> for reliable clears.</p>
                     </div>
                     <div class="zem-tier-card" style="border-top: 3px solid var(--zem-low-color);">
                         <div class="zem-tier-card-hdr" style="color:var(--zem-low-color);">
@@ -1888,15 +1932,15 @@
                         <p>When a slot is unassigned (<strong>?</strong>), Torn shows <em>your personal preview CPR</em> in the top corner. The footer shows the OC's target <strong>Recommended Min CPR</strong> and adds a <strong>✓</strong> if you qualify:</p>
                         <div class="zem-demo-pill-row">
                             <span style="color:var(--zem-anchor-color); font-weight:700;">Imp: 37.9%</span>
-                            <span class="zem-oc-fail-pill risk-low" style="margin:0;">75%+ ✓</span>
+                            <span class="zem-oc-fail-pill risk-low" style="margin:0;">80%+ ✓</span>
                         </div>
                     </div>
                     <div class="zem-guide-box" style="margin-bottom:0;">
                         <h4>2. Joined Member Slots</h4>
-                        <p>Once a player joins, the card switches to their actual <strong>Slot Fail %</strong> (<code>100 - Member CPR</code>) and colors the badge Green, Amber, or Red against the role's target CPR:</p>
+                        <p>Once a player joins, the card switches to their actual <strong>Slot Fail %</strong> (<code>100 - Member CPR</code>) colored by risk (<span style="color:#69db7c;">Green &le;15%</span>, <span style="color:#ffd43b;">Amber 16–25%</span>, <span style="color:#ff8787;">Red 26%+</span>):</p>
                         <div class="zem-demo-pill-row">
                             <span style="color:var(--zem-anchor-color); font-weight:700;">Imp: 27.5%</span>
-                            <span class="zem-oc-fail-pill risk-low" style="margin:0;">Fail: 22%</span>
+                            <span class="zem-oc-fail-pill risk-med" style="margin:0;">Fail: 22%</span>
                         </div>
                     </div>
                 </div>
@@ -2209,7 +2253,7 @@
                 const recStr = s.recMinCPR > 0 ? `${s.recMinCPR}%+` : 'Any';
                 let cprDisplay = '';
                 if (s.isFilled && s.cpr !== null) {
-                    const cprColor = s.isBelowRec ? '#fbbf24' : '#4ade80';
+                    const cprColor = s.riskClass === 'risk-high' ? '#ff8787' : s.riskClass === 'risk-med' ? '#ffd43b' : '#69db7c';
                     const warnTitle = s.isBelowRec ? ` title="Below OC Recommended Min CPR (${recStr})"` : ` title="Meets OC Recommended Min CPR (${recStr})"`;
                     cprDisplay = `<span style="color:${cprColor}; font-weight:700;"${warnTitle}>${s.cpr}%${s.isBelowRec ? ' ⚠' : ''} <span style="color:#6b7280; font-weight:400; font-size:10px;">(Rec ${recStr})</span></span>`;
                 } else {
@@ -2217,10 +2261,11 @@
                     cprDisplay = `<span style="color:#60a5fa; font-weight:600;">Rec ${recStr}${youHint}</span>`;
                 }
 
+                const failColor = s.riskClass === 'risk-high' ? '#ff8787' : s.riskClass === 'risk-med' ? '#ffd43b' : '#69db7c';
                 const failDisplay = s.weight === 0
-                    ? `<span style="color:#4ade80;">0% (0.0%)</span>`
+                    ? `<span style="color:#69db7c;">0% (0.0%)</span>`
                     : (s.isFilled
-                        ? `<span style="color:#f87171; font-weight:600;">${s.slotFail.toFixed(0)}% (-${s.weightedFail.toFixed(1)}%)</span>`
+                        ? `<span style="color:${failColor}; font-weight:700;">${s.slotFail.toFixed(0)}% (-${s.weightedFail.toFixed(1)}%)</span>`
                         : `<span style="color:#6b7280;">—</span>`);
 
                 return `
@@ -2235,8 +2280,9 @@
                 `;
             }).join('');
 
+            const passColor = oc.passRate < 75 ? '#ff8787' : oc.passRate < 85 ? '#ffd43b' : '#4ade80';
             const passFailSummaryHtml = oc.hasMembers
-                ? `<span style="color:#4ade80;">${oc.isAllFilled ? '' : 'Est. '}Pass: ${oc.passRate.toFixed(1)}%</span>
+                ? `<span style="color:${passColor};">${oc.isAllFilled ? '' : 'Est. '}Pass: ${oc.passRate.toFixed(1)}%</span>
                    <span style="color:#374151;"> | </span>
                    <span style="color:#f87171;">Fail: ${oc.failRate.toFixed(1)}%</span>`
                 : `<span style="color:#6b7280;">No members joined yet</span>`;
